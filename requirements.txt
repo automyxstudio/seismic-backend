@@ -1,0 +1,37 @@
+# =============================================================================
+# Seismic Backend — Dependencias
+# =============================================================================
+
+# --- API ---
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+pydantic-settings==2.7.0
+
+# --- MongoDB async driver ---
+motor==3.6.0
+pymongo==4.10.1          # usado en Airflow DAGs (contexto síncrono)
+
+# --- Redis ---
+redis==5.2.1
+
+# --- HTTP client (ingesta USGS) ---
+httpx==0.28.1
+
+# --- Auth JWT ---
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# --- Logging estructurado ---
+structlog==24.4.0
+
+# --- Observabilidad ---
+prometheus-client==0.21.1
+prometheus-fastapi-instrumentator==7.0.0
+
+# --- Airflow (se instala separado en el contenedor de Airflow) ---
+# apache-airflow==2.10.4  # ver Dockerfile.airflow
+
+# --- Utils ---
+python-multipart==0.0.20  # para form data en login
+python-dotenv==1.0.1
