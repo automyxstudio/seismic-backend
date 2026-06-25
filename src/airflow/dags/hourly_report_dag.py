@@ -24,6 +24,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 
 from src.services.reporting_service import ReportingService
+from src.services.analytics_service import AnalyticsService
 
 log = logging.getLogger(__name__)
 
@@ -106,6 +107,27 @@ def save_report(ti, **context) -> None:
         service.close()
 
 
+def export_parquet(logical_date: datetime, **context) -> dict:
+    """
+    Task 4: exporta los eventos de la ventana horaria a Parquet (capa analítica).
+
+    Corre en paralelo con save_report — ambas leen los datos del XCom de read_events
+    pero escriben en destinos distintos: MongoDB (transaccional) vs Parquet (analítico).
+
+    La partición Hive resultante: year=YYYY/month=MM/day=DD/HH.parquet
+    permite a Spark, DuckDB o Pandas leer solo las horas necesarias (partition pruning).
+    """
+    period_start = logical_date.replace(minute=0, second=0, microsecond=0)
+
+    service = AnalyticsService()
+    try:
+        result = service.export_hour_to_parquet(period_start)
+        log.info(f"Parquet exportado: {result}")
+        return result
+    finally:
+        service.close()
+
+
 # Definición del DAG
 with DAG(
     dag_id="hourly_seismic_report",
@@ -132,7 +154,16 @@ with DAG(
         python_callable=save_report,
     )
 
-    # Definir dependencias con el operador >> (bitshift)
-    # read_events debe terminar exitosamente antes de generate_report
-    # generate_report debe terminar exitosamente antes de save_report
-    read_task >> generate_task >> save_task
+    parquet_task = PythonOperator(
+        task_id="export_parquet",
+        python_callable=export_parquet,
+    )
+
+    # Flujo:
+    #   read_events → generate_report → save_report  (pipeline de reporte)
+    #             ↘                                   (capa analítica — en paralelo)
+    #               export_parquet
+    #
+    # save_report y export_parquet corren en paralelo tras generate_report.
+    # Si export_parquet falla, save_report no se ve afectado (y viceversa).
+    read_task >> generate_task >> [save_task, parquet_task]

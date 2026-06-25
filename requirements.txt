@@ -34,6 +34,10 @@ prometheus-fastapi-instrumentator==7.0.0
 # --- Airflow (se instala separado en el contenedor de Airflow) ---
 # apache-airflow==2.10.4  # ver Dockerfile.airflow
 
+# --- Analytics / Data Lake ---
+pandas==2.2.3
+pyarrow==18.1.0          # motor de Parquet — lectura/escritura columnar
+
 # --- Utils ---
 python-multipart==0.0.20  # para form data en login
 python-dotenv==1.0.1

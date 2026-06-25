@@ -23,7 +23,7 @@ from src.database.indexes import create_indexes
 from src.database.repositories.user_repo import UserRepository
 from src.services.auth_service import hash_password
 from src.models.user import UserDocument
-from src.api.routes import auth, earthquakes, metrics, reports, ws
+from src.api.routes import auth, earthquakes, metrics, reports, ws, analytics
 
 log = structlog.get_logger()
 
@@ -118,6 +118,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics.router)
     app.include_router(reports.router)
     app.include_router(ws.router)
+    app.include_router(analytics.router)
 
     @app.get("/health", tags=["health"])
     async def health() -> dict:
