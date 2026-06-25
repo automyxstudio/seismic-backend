@@ -77,8 +77,8 @@ class AnalyticsService:
 
     def __init__(self) -> None:
         settings = get_settings()
-        self.client = MongoClient(settings.mongodb_url)
-        self.db = self.client[settings.mongodb_db]
+        self.client = MongoClient(settings.mongo_uri)
+        self.db = self.client[settings.mongo_db]
 
     def close(self) -> None:
         self.client.close()
@@ -157,7 +157,7 @@ class AnalyticsService:
 
         if parquet_files:
             df = pd.read_parquet(PARQUET_BASE, engine="pyarrow")
-            df = df[df["event_time"] >= pd.Timestamp(since, tz="UTC")]
+            df = df[df["event_time"] >= pd.Timestamp(since).tz_convert("UTC")]
             log.info("ml_dataset_from_parquet", files=len(parquet_files), rows=len(df))
         else:
             # Fallback: leer desde MongoDB si aún no hay Parquets exportados
