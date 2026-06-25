@@ -109,7 +109,8 @@ def create_app() -> FastAPI:
     )
 
     # Prometheus — instrumenta todos los endpoints automáticamente
-    Instrumentator().instrument(app).expose(app)
+    # endpoint_path cambiado a /prometheus para no colisionar con GET /metrics (métricas sísmicas)
+    Instrumentator().instrument(app).expose(app, endpoint="/prometheus")
 
     # Registrar rutas
     app.include_router(auth.router)
