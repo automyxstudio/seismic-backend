@@ -14,13 +14,16 @@ import uuid
 import structlog
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from pymongo import ASCENDING, DESCENDING
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from src.database.mongodb import get_database
 from src.database.redis import get_redis
 from src.database.repositories.earthquake_repo import EarthquakeRepository
+from src.services.processing_service import ProcessingService
+from src.services.metrics_service import MetricsService
+from src.clients.usgs_client import USGSClient
 from src.models.earthquake import EarthquakeListResponse, EarthquakeResponse, EarthquakeDocument
 from src.config.constants import MagnitudeRange, classify_magnitude, REDIS_CHANNEL_NEW_EVENT
 from src.api.dependencies import get_current_user
@@ -166,3 +169,51 @@ async def simulate_earthquake(
     )
 
     return EarthquakeResponse(**doc)
+
+
+@router.post("/sync", tags=["earthquakes"])
+async def sync_from_usgs(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> dict:
+    """
+    Dispara un ciclo de ingesta manual desde la API de USGS.
+
+    Ejecuta el mismo pipeline que el servicio de ingesta automático:
+    fetch → transform → upsert (deduplicado) → métricas → Redis pub/sub.
+
+    Útil para forzar una sincronización sin esperar los 3 minutos del loop.
+    Los eventos ya existentes se ignoran gracias al upsert idempotente.
+    """
+    try:
+        redis = get_redis()
+        raw_features = await USGSClient().fetch_earthquakes()
+
+        if not raw_features:
+            return {"status": "ok", "fetched": 0, "new": 0, "message": "USGS no reporta sismos en la última hora"}
+
+        processing = ProcessingService()
+        repo = EarthquakeRepository(db)
+        metrics = MetricsService(db=db, redis=redis)
+
+        events = processing.transform_many(raw_features)
+
+        new_count = 0
+        for event in events:
+            is_new = await repo.upsert(event)
+            if is_new:
+                await metrics.process_new_event(event)
+                new_count += 1
+
+        log.info("manual_sync_done", fetched=len(raw_features), valid=len(events), new=new_count)
+        return {
+            "status": "ok",
+            "fetched": len(raw_features),
+            "valid": len(events),
+            "new": new_count,
+            "already_stored": len(events) - new_count,
+        }
+
+    except Exception as e:
+        log.error("manual_sync_error", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error sincronizando con USGS: {str(e)}")
