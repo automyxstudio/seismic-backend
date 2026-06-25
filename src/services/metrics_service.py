@@ -73,8 +73,13 @@ class MetricsService:
         })
         await self.redis.publish(REDIS_CHANNEL_NEW_EVENT, payload)
 
-        # 4. Invalidar caché de métricas para que el próximo GET /metrics sea fresco
-        await self.redis.delete(REDIS_KEY_METRICS_CURRENT)
+        # 4. Invalidar todas las entradas de caché de métricas.
+        # La ruta guarda con clave seismic:metrics:current:<limit>, por lo que
+        # hay una entrada por cada valor de limit que haya sido consultado.
+        # Borramos con patrón para no dejar ninguna stale.
+        keys = await self.redis.keys(f"{REDIS_KEY_METRICS_CURRENT}:*")
+        if keys:
+            await self.redis.delete(*keys)
 
         log.info(
             "metrics_updated",

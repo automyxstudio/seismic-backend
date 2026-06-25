@@ -144,8 +144,13 @@ async def simulate_earthquake(
     result = await db.earthquakes.insert_one(doc)
     doc["_id"] = str(result.inserted_id)
 
-    # Publicar en Redis → el WebSocket lo retransmite a todos los clientes
     redis = get_redis()
+
+    # Actualizar métricas — mismo paso que hace la ingesta automática
+    # Esto actualiza los contadores en MongoDB y el caché Redis de métricas
+    await MetricsService(db=db, redis=redis).process_new_event(event)
+
+    # Publicar en Redis → el WebSocket lo retransmite a todos los clientes
     payload = {
         "id": doc["_id"],
         "event_id": event.event_id,
